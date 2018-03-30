@@ -1,0 +1,17 @@
+{
+  "name": "pokebotjs",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "btoa": "^1.2.1",
+    "discord.js": "^11.3.2",
+    "moment-timezone": "^0.5.14",
+    "npm-install-peers": "^1.2.1"
+  }
+}
