@@ -9,6 +9,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "atob": "^2.1.0",
     "btoa": "^1.2.1",
     "discord.js": "^11.3.2",
     "moment-timezone": "^0.5.14",
