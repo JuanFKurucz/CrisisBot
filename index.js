@@ -1,6 +1,6 @@
 const Discord = require('discord.js');
 const client = new Discord.Client();
-const {registrar,findCloserMatch,findCloseMatchesDic,getNick} = require(__dirname+"/lib/dataHandler.js");
+const {loadGuerraClanesData,saveGuerraClanesData,registrar,findCloserMatch,findCloseMatchesDic,getNick} = require(__dirname+"/lib/dataHandler.js");
 const {writeFile,readFile,changeFileName,createUserFile,eliminateUserFile} = require(__dirname+"/lib/handleFile.js");
 const {eventos,guardarEvento} = require(__dirname+"/lib/eventsHandler.js");
 const {guardarPokemon,guardarEquipo,obtenerPokemon,borrarPokemon,borrarEquipo} = require(__dirname+"/lib/wiki.js");
@@ -13,8 +13,7 @@ const ChannelIds={  "anuncio-eventos" : "427861480264695809",
                     "participacion"   : "429671407061041173",
                     "organizacion"    : "433651760238821397"}
 const RolesIds={  "Miembro":"422199019075272704"  }
-
-var warMaps=[
+const warMaps=[
   "Meadow Arcoiris",
   "Ciudad de Hector",
   "NeoGen (Pueblo de Neo)",
@@ -79,7 +78,6 @@ function send(msg,m){
 function tagRole(RoleName){
   return "<@&"+RolesIds[RoleName]+">"
 }
-
 function getKeyByValue(object,value){
   for( var prop in object ) {
       if( object.hasOwnProperty( prop ) ) {
@@ -92,7 +90,7 @@ function getKeyByValue(object,value){
 
 
 
-function editSecuence(a){
+function editSecuence(a,callback){
   if(a.length!=0){
     client.channels
     .get(a[0].split(",")[0])
@@ -100,14 +98,14 @@ function editSecuence(a){
     .then(function(message){
       message.edit(a[0].split(",")[2])
       a.shift();
-      editSecuence(a);
+      editSecuence(a,callback);
     })
     .catch(console.error);
   } else {
     console.log("done editting");
+    callback();
   }
 }
-
 client.on('ready', () => {
   console.log(client.channels.get(ChannelIds["participacion"]).messages);
   console.log(`Logged in as ${client.user.tag}!`);
@@ -122,7 +120,6 @@ client.on('ready', () => {
     )
   },1000);*/
 });
-
 
 function separateCommand(command){
   var listCommand=[];
@@ -151,7 +148,6 @@ function separateCommand(command){
   listCommand.push(tmp);
   return listCommand;
 }
-
 function granPermission(member){
   var levelPermission=99;
   if(member.id == "162355874570960896"){
@@ -170,39 +166,80 @@ function granPermission(member){
   }
   return levelPermission;
 }
-
 function sendMp(author,text){
   author.send(text);
 }
 
 
-function changeParticipation(nick,pos=-1){
-  client.channels.get(ChannelIds["participacion"]).fetchMessage(MessagesId["listaGuerra"])
-    .then(function(message){
-      var realMessage=message.content;
-      var entries=realMessage.split("\n");
-      for(var e=0;e<entries.length;e++){
-        if(entries[e].indexOf("-")!=-1){
-          if(entries[e].includes(nick) && ((pos==-1 && isNaN(entries[e].trim()[0]))||entries[e].trim()[0]==pos)){
-            if(command[1]=="participar" && entries[e].indexOf(":white_check_mark:")==-1){
-              entries[e]+="\t\t\t<@!"+msg.author.id+"> :white_check_mark:";
-            } else if(command[1]=="abandonar" && entries[e].indexOf(":white_check_mark:")!=-1) {
-              entries[e]=entries[e].split("\t\t\t")[0];
-            }
-          }
+function getEditarWarMensajes(data,mapa){
+  loadGuerraClanesData(function(oldData){
+    var arrayList=[];
+    var change=false;
+    var realMessage="\n:round_pushpin:\t\t"+mapa+"\t\t:round_pushpin:\n";
+    for(var i=0;i<data[mapa].length;i++){
+      if(oldData.length>i && oldData[i] == data[i]){
+        continue;
+      } else {
+        change=true;
+        if(data[mapa][i].split(" ")[data[mapa][i].split(" ").length-1]=="no"){
+          realMessage+="\t"+data[mapa][i].slice(0,-3)+"\n";
+        } else {
+          realMessage+="\t"+data[mapa][i].slice(0,-3)+"\t\t\t:white_check_mark:"+"\n";
         }
       }
-      message.edit(entries.join("\n"))
-    })
-    .catch(console.error);
+    }
+    if(change){
+      arrayList.push(ChannelIds["organizacion"]+","+MessagesId["organizacion"][mapa]+","+realMessage);
+      arrayList.push(ChannelIds["participacion"]+","+MessagesId["participacion"][mapa]+","+realMessage);
+    }
+    return arrayList;
+  });
+}
+function saveEditarWarMensajes(data,arrayList){
+  saveGuerraClanesData(data);
+  editSecuence(arrayList,function(){
+    usuarioCreandoGuerra = null;
+    estadoCreandoGuerra = 0;
+    textoGuerra="";
+  });
+}
+function changeParticipation(nick,pos=-1){
+  loadGuerraClanesData(function(data){
+    var arrayList=[];
+    for(var mapa in data){
+      var editado=false;
+      for(var i=0;i<data[mapa].length;i++){
+        var infoUser=data[mapa][i].split(" ");
+        if(data[mapa][i].indexOf(nick)!=-1 && (infoUser[infoUser.length-2]==pos || pos==-1)){
+          editado = true;
+          if(infoUser[infoUser.length-1]=="no"){
+            infoUser[infoUser.length-1]="yes";
+          } else {
+            infoUser[infoUser.length-1]="no";
+          }
+          data[mapa][i]=infoUser.join(" ");
+        }
+      }
+
+      if(editado){
+        arrayList.concat(getEditarWarMensajes(data,mapa));
+      }
+    }
+    saveEditarWarMensajes(data,arrayList);
+  });
 }
 
 var usuarioCreandoGuerra = null;
 var estadoCreandoGuerra = 0;
 var textoGuerra="";
+var estadoEditandoGuerra = 0;
+var usuarioEditandoGuerra = null;
+var accionesEditandoGuerra=[];
 function guerra(msg,permiso,command){
   try{
-    if(permiso<=2 && msg.channel.id == ChannelIds["participacion"]){
+    if(permiso<=1 && msg.channel.id == ChannelIds["organizacion"]){
+
+    } else if(permiso<=2 && msg.channel.id == ChannelIds["participacion"]){
       switch(command[1]){
         case "participar":
         case "abandonar":
@@ -221,97 +258,6 @@ function guerra(msg,permiso,command){
             })
           }
           break;
-        case "crear":
-          console.log('inside crear');
-          if(permiso<=1 && estadoCreandoGuerra==0){
-            usuarioCreandoGuerra=msg.author.id;
-            estadoCreandoGuerra=1;
-            textoGuerra+=warMaps[estadoCreandoGuerra-1]+"\n";
-            sendMp(msg.author,"Ingrese la lista de usuarios para "+warMaps[estadoCreandoGuerra-1] + "\n(Ingrese '-saltar' para dejar el mapa vacio)");
-          } else {
-            if(permiso<=1){
-              throw new Error("Ya hay una creacion de guerra en proceso.");
-            } else {
-              throw new Error("No tienes permisos para usar este comando.");
-            }
-          }
-
-
-            /*
-            var enters=msg.content.split("\n");
-            var vdic={};
-            var lastMap="";
-            for(var m=1;m<enters.length;m++){
-              if(enters[m].indexOf("-")==-1){ //mapa
-                lastMap=enters[m].trim();
-                vdic[lastMap]=[];
-              } else { //usuario
-                vdic[lastMap].push(enters[m].trim());
-              }
-            }
-            findCloseMatchesDic(vdic,function(dic){
-              client.channels.get(ChannelIds["participacion"]).fetchMessage(MessagesId["listaGuerra"])
-                  .then(function(message){
-                    var realMessage="Esta no es la lista OFICIAL y posiblemente este mal\n\n:map:️\t\tMAPAS\t"+moment().tz(PetDexTimeZone).format("DD/MM/YYYY")+"\t\t:map:️\n";
-                    for(var key in dic){
-                      realMessage+="\n:round_pushpin:\t\t"+key+"\t\t:round_pushpin:\n";
-                      for(var i=0;i<dic[key].length;i++){
-                        realMessage+="\t"+dic[key][i]+"\n";
-                      }
-                    }
-                    message.edit(realMessage+"\n\nEsta no es la lista OFICIAL y posiblemente este mal");
-                  })
-                  .catch(console.error);
-            })
-            */
-
-          break;
-        case "editar":// editar accion persona mapa
-          if(permiso<=1){
-            client.channels.get(ChannelIds["participacion"]).fetchMessage(MessagesId["listaGuerra"])
-                .then(function(message){
-                  var celdas = message.content.split(":round_pushpin:");
-                  var dic={};
-                  var lastC="";
-                  for(var c=0;c<celdas.length;c++){
-                    if(celdas[c].split("\n").length==1){
-                      lastC=celdas[c].trim();
-
-                      dic[lastC]=[];
-                    } else if(lastC!="") {
-                      var names=celdas[c].split("\t");
-                      for(var n=0;n<names.length;n++){
-                        if(names[n].trim()!="" && !names[n].includes("(")){
-                          dic[lastC].push(names[n].trim());
-                        }
-                      }
-                    }
-                  }
-                  switch(command[2]){
-                    case "agregar":
-                      findCloserMatch(
-                        command[3].substr(command[3].indexOf("-")+1,command[3].length).replace(/©/g,""),
-                        "",function(n){
-                        dic[command[4]].push(command[3].substr(0,command[3].indexOf("-")+1)+n);
-                        editWarMessage(dic);
-                      })
-                      break;
-                    case "borrar":
-                      for(var i=0;i<dic[command[4]].length;i++){
-                        if(dic[command[4]][i].toLowerCase().includes(command[3].toLowerCase())){
-                          dic[command[4]].splice(i, 1);
-                          break;
-                        }
-                      }
-                      editWarMessage(dic);
-                      break;
-                  }
-                })
-                .catch(console.error);
-          } else {
-            throw new Error("No tienes permisos para usar este comando.");
-          }
-          break;
       }
     } else {
       if(permiso<=2){
@@ -321,7 +267,6 @@ function guerra(msg,permiso,command){
       }
     }
   } catch(e){
-    console.log(e.message);
     if(msg.channel.id == ChannelIds["participacion"]){
       sendMp(msg.author,e.message);
     } else {
@@ -330,53 +275,187 @@ function guerra(msg,permiso,command){
   }
 }
 
+function endEditingWar(author,data){
+  editSecuence(getEditarWarMensajes(data,accionesEditandoGuerra[1]),function(){
+    accionesEditandoGuerra=[];
+    estadoEditandoGuerra=0;
+    usuarioEditandoGuerra=null;
+    saveGuerraClanesData(data);
+    sendMp(author,"Edicion terminada, muchas gracias.");
+  });
+}
+
 client.on('message', msg => {
   try{
     switch(msg.channel.type){
       case "dm":
         if(usuarioCreandoGuerra==msg.author.id){
-          if(msg.content!="-saltar"){
-            textoGuerra+=msg+"\n";
-          }
-          estadoCreandoGuerra++;
-          if(estadoCreandoGuerra<warMaps.length){
-            textoGuerra+=warMaps[estadoCreandoGuerra-1]+"\n";
-            sendMp(msg.author,"Ingrese la lista de usuarios para "+warMaps[estadoCreandoGuerra-1] + "\n(Ingrese '-saltar' para dejar el mapa vacio)");
-          } else {
-            var enters=textoGuerra.split("\n");
-            var vdic={};
-            var lastMap="";
-            for(var m=0;m<enters.length-1;m++){
-              if(warMaps.indexOf(enters[m])!=-1){ //mapa
-                lastMap=enters[m];
-                vdic[lastMap]=[];
-              } else { //usuario
-                vdic[lastMap].push(enters[m].trim());
-              }
-            }
-            findCloseMatchesDic(vdic,function(dic){
-              var realMessage="Esta no es la lista OFICIAL y posiblemente este mal\n\n:map:️\t\tMAPAS\t"+moment().tz(PetDexTimeZone).format("DD/MM/YYYY")+"\t\t:map:️\n";
-              var arrayList=[];
-              arrayList.push(ChannelIds["organizacion"]+","+MessagesId["organizacion"]["Info"]+","+realMessage);
-              arrayList.push(ChannelIds["participacion"]+","+MessagesId["participacion"]["Info"]+","+realMessage);
-              for(var bKey in MessagesId){
-                for(var key in dic){
-                  realMessage="\n:round_pushpin:\t\t"+key+"\t\t:round_pushpin:\n";
-                  for(var i=0;i<dic[key].length;i++){
-                    realMessage+="\t"+dic[key][i]+"\n";
-                  }
-                  arrayList.push(ChannelIds[bKey]+","+MessagesId[bKey][key]+","+realMessage);
+          if(msg.content=="saltar" || msg.content=="terminar"){
+            estadoCreandoGuerra++;
+            if(estadoCreandoGuerra<=warMaps.length){
+              textoGuerra+=warMaps[estadoCreandoGuerra-1]+"\n";
+              sendMp(msg.author,"Ingrese la lista de usuarios para **"+ warMaps[estadoCreandoGuerra-1] + "**");
+            } else {
+              var enters=textoGuerra.split("\n");
+              var vdic={};
+              var lastMap="";
+              for(var m=0;m<enters.length-1;m++){
+                if(warMaps.indexOf(enters[m])!=-1){
+                  lastMap=enters[m];
+                  vdic[lastMap]=[];
+                } else {
+                  vdic[lastMap].push(enters[m].trim() + " no");
                 }
               }
-              console.log(arrayList);
-              editSecuence(arrayList);
-            })
+              findCloseMatchesDic(vdic,function(dic){
+                loadGuerraClanesData(function(oldData){
+                  var realMessage="Esta no es la lista OFICIAL y posiblemente este mal\n\n:map:️\t\tMAPAS\t"+moment().tz(PetDexTimeZone).format("DD/MM/YYYY")+"\t\t:map:️\n";
+                  var arrayList=[];
+                  arrayList.push(ChannelIds["organizacion"]+","+MessagesId["organizacion"]["Info"]+","+realMessage);
+                  arrayList.push(ChannelIds["participacion"]+","+MessagesId["participacion"]["Info"]+","+realMessage);
+                  for(var bKey in MessagesId){
+                    for(var key in dic){
+                      realMessage="\n:round_pushpin:\t\t"+key+"\t\t:round_pushpin:\n";
+                      for(var i=0;i<dic[key].length;i++){
+                        realMessage+="\t"+dic[key][i].slice(0,-3)+"\n";
+                      }
+                      arrayList.push(ChannelIds[bKey]+","+MessagesId[bKey][key]+","+realMessage);
+                    }
+                  }
+
+                  editSecuence(arrayList,function(){
+                    usuarioCreandoGuerra = null;
+                    estadoCreandoGuerra = 0;
+                    textoGuerra="";
+                    saveGuerraClanesData(dic);
+                  });
+                });
+              })
+            }
+          } else {
+            textoGuerra+=msg+"\n";
           }
+        }
+        if(usuarioEditandoGuerra==msg.author.id){
+          switch(estadoEditandoGuerra){
+            case 1:
+              //se obtiene accion
+              if(msg.content.toLowerCase()=="agregar" || msg.content.toLowerCase()=="borrar"){
+                accionesEditandoGuerra.push(msg.content.toLowerCase());
+                estadoEditandoGuerra++;
+                //imprimir lista de mapas con indices
+                var nextMessage="Ingrese el numero de mapa a **"+msg.content.toLowerCase()+"**\n";
+                for(var i=0;i<warMaps.length;i++){
+                  nextMessage+="**"+(i+1)+"** - "+warMaps[i]+"\n";
+                }
+                sendMp(msg.author,nextMessage);
+              } else {
+                sendMp(msg.author,"Error: debe ingresar **agregar** o **borrar**");
+              }
+              break;
+            case 2:
+              //se obtiene mapa
+              var mapNumber = parseInt(msg.content);
+              var mapa="";
+              if(!isNaN(mapNumber) && mapNumber>0 && mapNumber<=warMaps.length){
+                mapNumber--;
+                mapa=warMaps[mapNumber];
+                accionesEditandoGuerra.push(mapa);
+                switch(accionesEditandoGuerra[0]){
+                  case "borrar":
+                    //borrar
+                    loadGuerraClanesData(function(data){
+                      //imprimir usuarios del mapa con indices
+                      var nextMessage="Ingrese el numero de usuario a **"+accionesEditandoGuerra[0]+"**\n";
+                      for(var i=0;i<data[mapa].length;i++){
+                        nextMessage+="**"+(i+1)+"** - "+data[mapa][i]+"\n";
+                      }
+                      sendMp(msg.author,nextMessage);
+                    })
+                    break;
+                  case "agregar":
+                    //agregar
+                      //se pide que ingrese (grupo) nick (equipo)
+                    sendMp(msg.author,"Ingrese: (grupo) nick (equipo)\nEjemplo:\n1 helmit 1");
+                    break;
+                }
+                estadoEditandoGuerra++;
+              } else {
+                sendMp(msg.author,"Debe ingresar un numero entre 1 y "+warMaps.length+" inclusive");
+              }
+              break;
+            case 3:
+              //se realiza accion total
+              loadGuerraClanesData(function(data){
+                switch(accionesEditandoGuerra[0]){
+                  case "borrar":
+                    var i=parseInt(msg.content);
+                    if(!isNaN(i) && i>0 && i <= data[accionesEditandoGuerra[1]].length){
+                      data[accionesEditandoGuerra[1]].splice(i-1, 1);
+                      endEditingWar(msg.author,data);
+                    } else {
+                      sendMp(msg.author,"Debe ingresar un numero entre 1 y "+data[accionesEditandoGuerra[1]].length+" inclusive");
+                    }
+                    break;
+                  case "agregar":
+                    var numEquipo = 1;
+                    var inputPlayerData=msg.content.split(" ");
+                    if(inputPlayerData.length >=3 && !isNaN(inputPlayerData[2])){
+                      numEquipo=inputPlayerData[2];
+                    }
+                    findCloserMatch(inputPlayerData[1].replace(/©/g,""),"",function(nick){
+                      var found=false;
+                      for(var i=0;i<data[accionesEditandoGuerra[1]].length;i++){
+                        var playerData=data[accionesEditandoGuerra[1]][i].split(" ");
+                        if(playerData[1] == nick && (playerData.length>=3 && playerData[2] == numEquipo)){
+                          found=true;
+                        }
+                      }
+                      if(!found){
+                        data[accionesEditandoGuerra[1]].push(inputPlayerData[0]+" "+nick+" "+numEquipo+" no");
+                        endEditingWar(msg.author,data);
+                      } else {
+                        sendMp(msg.author,"Este jugador ya esta agregado");
+                      }
+                    })
+                    break;
+                }
+              })
+              //se resetea la edicion
+
+              break;
+          }
+
         }
         break;
       case "text":
         const guildMember = msg.member;
         const permiso=granPermission(guildMember);
+
+        if(permiso<=1 && msg.channel.id == ChannelIds["organizacion"]){
+          switch(msg.content){
+            case "crear":
+              if(estadoCreandoGuerra==0){
+                usuarioCreandoGuerra=msg.author.id;
+                estadoCreandoGuerra=1;
+                textoGuerra+=warMaps[estadoCreandoGuerra-1]+"\n";
+                sendMp(msg.author,"Debe ingresar: (Numero de grupo) Nick  (Numero de equipo, puede dejarse vacio)\nEjemplo: 1 helmit 1\nPuede ingresarse varios en un solo mensaje separado por enters o ingresar en varios mensajes. Para pasar al siguiente mapa ingrese 'terminar' o 'saltar'\n\nIngrese la lista de usuarios para **"+warMaps[estadoCreandoGuerra-1]+"**");
+              } else {
+                sendMp(msg.author,"Ya hay una creacion de guerra en proceso.");
+              }
+              break;
+            case "editar":
+              if(estadoCreandoGuerra==0 && estadoEditandoGuerra==0){
+                usuarioEditandoGuerra=msg.author.id;
+                estadoEditandoGuerra=1;
+                sendMp(msg.author,"Introduzca: **agregar** o **borrar** para continuar con la edicion");
+              } else {
+                sendMp(msg.author,"Ya hay una edicion de guerra en proceso.");
+              }
+              break;
+          }
+        }
+
         if (msg.content[0] === '+') {
           var command = separateCommand(msg.content.substring(1,msg.content.length));
           switch(command[0]){
@@ -531,30 +610,15 @@ client.on('message', msg => {
               break;
           }
         }
-        if(msg.author.id != "428954422941319190" && msg.channel.id == ChannelIds["participacion"]){
+        //Borrar mensajes en canales prohibidos en hablar pero permitidos en enviar comandos
+        if(msg.author.id != "428954422941319190" && (msg.channel.id == ChannelIds["participacion"] || msg.channel.id == ChannelIds["organizacion"])){
           msg.delete();
         }
         break;
-
     }
   } catch(e){
     console.log(e);
   }
 });
-
-function editWarMessage(dic){
-  client.channels.get(ChannelIds["participacion"]).fetchMessage(MessagesId["listaGuerra"])
-      .then(function(message){
-        var realMessage="\n\n:map:️\t\tMAPAS\t"+moment().tz(PetDexTimeZone).format("DD/MM/YYYY")+"\t\t:map:️\n";
-        for(var key in dic){
-          realMessage+="\n:round_pushpin:\t\t"+key+"\t\t:round_pushpin:\n";
-          for(var i=0;i<dic[key].length;i++){
-            realMessage+="\t"+dic[key][i]+"\n";
-          }
-        }
-        message.edit(realMessage);
-      })
-      .catch(console.error);
-}
 
 client.login('NDI4OTU0NDIyOTQxMzE5MTkw.DZ6mdA.eKp8yO_kQCVAWeGRZP94uJrRto4');
