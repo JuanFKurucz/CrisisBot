@@ -98,7 +98,7 @@ function editSecuence(a){
     .get(a[0].split(",")[0])
     .fetchMessage(a[0].split(",")[1])
     .then(function(message){
-      message.edit(getKeyByValue(ChannelIds,a[0].split(",")[2]))
+      message.edit(a[0].split(",")[2])
       a.shift();
       editSecuence(a);
     })
@@ -129,7 +129,6 @@ function separateCommand(command){
   var tmp="";
   var comillas=false;
   for(var letter in command){
-
     if(command[letter]==" " || command[letter]=="\n"){
       if(comillas==false){
         listCommand.push(tmp);
@@ -337,7 +336,7 @@ client.on('message', msg => {
       case "dm":
         if(usuarioCreandoGuerra==msg.author.id){
           if(msg.content!="-saltar"){
-            textoGuerra+=msg;
+            textoGuerra+=msg+"\n";
           }
           estadoCreandoGuerra++;
           if(estadoCreandoGuerra<warMaps.length){
@@ -347,9 +346,9 @@ client.on('message', msg => {
             var enters=textoGuerra.split("\n");
             var vdic={};
             var lastMap="";
-            for(var m=1;m<enters.length;m++){
-              if(warMaps.indexOf(enters[m].trim())==-1){ //mapa
-                lastMap=enters[m].trim();
+            for(var m=0;m<enters.length-1;m++){
+              if(warMaps.indexOf(enters[m])!=-1){ //mapa
+                lastMap=enters[m];
                 vdic[lastMap]=[];
               } else { //usuario
                 vdic[lastMap].push(enters[m].trim());
@@ -524,7 +523,7 @@ client.on('message', msg => {
               }
               break;
             default:
-              if(msg.channel.id == ChannelIds["participacion"]){
+              if(msg.channel.id == ChannelIds["participacion"] || msg.channel.id == ChannelIds["organizacion"]){
                 sendMp(msg.author,'El comando no existe')
               } else {
                 msg.reply('El comando no existe');
