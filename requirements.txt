@@ -1,0 +1,5 @@
+echo atob==2.1.0
+echo btoa==1.2.1
+echo discord.js==11.3.2
+echo moment-timezone==0.5.14
+echo npm-install-peers==1.2.1
